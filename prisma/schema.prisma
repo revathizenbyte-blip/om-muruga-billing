@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Invoice {
+  id            String   @id @default(uuid())
+  billNo        Int
+  date          String
+  customerName  String
+  customerPhone String
+  subTotal      Float
+  cgst          Float
+  sgst          Float
+  grandTotal    Float
+  items         String
+  createdAt     DateTime @default(now())
+}

@@ -1,0 +1,16 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\.agents\\skills",
+    "\\.claude\\skills",
+    "\\.cursor\\skills",
+    "\\.devin\\skills",
+    "\\app",
+    "\\app\\api",
+    "\\app\\api\\invoices",
+    "\\lib",
+    "\\prisma"
+  ],
+  "SelectedNode": "\\package.json",
+  "PreviewInSolutionExplorer": false
+}
