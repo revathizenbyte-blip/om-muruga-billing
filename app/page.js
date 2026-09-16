@@ -6,10 +6,10 @@ export default function Home() {
     const [billNo, setBillNo] = useState("1");
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
 
-    // Empty default customer fields
+    // Clean, empty default customer fields
     const [customer, setCustomer] = useState({ name: "", phone: "" });
 
-    // Empty default item row
+    // Clean, empty default item fields (Qty and Price start completely blank)
     const [items, setItems] = useState([
         { description: "", hsn: "", quantity: "", rate: "", amount: 0 },
     ]);
@@ -19,8 +19,11 @@ export default function Home() {
     const [showSearchModal, setShowSearchModal] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    // Calculations
-    const subtotal = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    // Auto-calculated totals
+    const subtotal = items.reduce(
+        (sum, item) => sum + (Number(item.amount) || 0),
+        0
+    );
     const cgst = subtotal * 0.09;
     const sgst = subtotal * 0.09;
     const total = subtotal + cgst + sgst;
@@ -39,19 +42,24 @@ export default function Home() {
     };
 
     const addItem = () => {
-        setItems([...items, { description: "", hsn: "", quantity: "", rate: "", amount: 0 }]);
+        setItems([
+            ...items,
+            { description: "", hsn: "", quantity: "", rate: "", amount: 0 },
+        ]);
     };
 
     const removeItem = (index) => {
         if (items.length > 1) {
             setItems(items.filter((_, i) => i !== index));
+        } else {
+            setItems([{ description: "", hsn: "", quantity: "", rate: "", amount: 0 }]);
         }
     };
 
-    // Real Database Save Function
+    // Real Database Save Handler
     const handleSave = async () => {
-        if (!customer.name) {
-            alert("Please enter customer name");
+        if (!customer.name.trim()) {
+            alert("Please enter a customer name before saving.");
             return;
         }
 
@@ -75,17 +83,17 @@ export default function Home() {
             if (response.ok) {
                 alert("Invoice saved successfully!");
             } else {
-                alert("Failed to save: " + (data.error || "Unknown error"));
+                alert(`Error: ${data.error || "Failed to save invoice"}`);
             }
         } catch (err) {
-            console.error(err);
-            alert("Error saving invoice");
+            console.error("Save Error:", err);
+            alert("Server error while connecting to database.");
         } finally {
             setLoading(false);
         }
     };
 
-    // Real Database Fetching Function
+    // Database Fetch Handler for Saved Invoices
     const fetchInvoices = async (query = "") => {
         setLoading(true);
         try {
@@ -93,9 +101,12 @@ export default function Home() {
             const data = await res.json();
             if (Array.isArray(data)) {
                 setSavedInvoices(data);
+            } else {
+                setSavedInvoices([]);
             }
         } catch (err) {
             console.error("Error fetching invoices:", err);
+            setSavedInvoices([]);
         } finally {
             setLoading(false);
         }
@@ -109,7 +120,10 @@ export default function Home() {
     const loadInvoice = (inv) => {
         setBillNo(inv.billNo ? inv.billNo.toString() : "1");
         setDate(inv.date || new Date().toISOString().split("T")[0]);
-        setCustomer({ name: inv.customerName || "", phone: inv.customerPhone || "" });
+        setCustomer({
+            name: inv.customerName || "",
+            phone: inv.customerPhone || "",
+        });
 
         try {
             if (typeof inv.items === "string") {
@@ -118,7 +132,7 @@ export default function Home() {
                 setItems(inv.items);
             }
         } catch (e) {
-            setItems([]);
+            setItems([{ description: "", hsn: "", quantity: "", rate: "", amount: 0 }]);
         }
 
         setShowSearchModal(false);
@@ -126,9 +140,11 @@ export default function Home() {
 
     return (
         <main className="min-h-screen bg-gray-600 p-4 sm:p-8 flex flex-col items-center">
-            {/* Top Action Bar */}
+            {/* Action Bar */}
             <div className="w-full max-w-3xl flex justify-between items-center mb-4">
-                <h1 className="text-xl font-bold text-white">Om Muruga Invoice Generator</h1>
+                <h1 className="text-xl font-bold text-white">
+                    Om Muruga Invoice Generator
+                </h1>
                 <div className="flex gap-2">
                     <button
                         onClick={handleOpenSearch}
@@ -139,7 +155,7 @@ export default function Home() {
                     <button
                         onClick={handleSave}
                         disabled={loading}
-                        className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm font-semibold hover:bg-emerald-700 cursor-pointer"
+                        className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm font-semibold hover:bg-emerald-700 cursor-pointer disabled:opacity-50"
                     >
                         {loading ? "Saving..." : "Save Only"}
                     </button>
@@ -155,7 +171,7 @@ export default function Home() {
                 </div>
             </div>
 
-            {/* Tax Invoice Document Template */}
+            {/* Tax Invoice Form */}
             <div className="bg-white w-full max-w-3xl p-8 rounded shadow-xl text-gray-800 border text-sm">
                 {/* Header */}
                 <div className="text-center border-b pb-4 mb-4">
@@ -167,29 +183,36 @@ export default function Home() {
                     </p>
                     <p className="text-xs text-gray-500">Cell: 997676 5151 / 80 98986464</p>
                     <p className="text-xs text-gray-500">
-                        6/1, Siddhi Vinayagar Colony, Linganoor, Siruvani Road, Vadavalli, Coimbatore - 641 007
+                        6/1, Siddhi Vinayagar Colony, Linganoor, Siruvani Road, Vadavalli,
+                        Coimbatore - 641 007
                     </p>
                     <h3 className="text-md font-bold mt-2 uppercase underline tracking-wider">
                         TAX INVOICE
                     </h3>
                 </div>
 
-                {/* Customer & Bill Details */}
+                {/* Customer Info */}
                 <div className="flex justify-between items-start gap-4 mb-4">
                     <div className="w-1/2 space-y-2">
-                        <label className="text-xs font-semibold text-gray-600 block">To</label>
+                        <label className="text-xs font-semibold text-gray-600 block">
+                            To
+                        </label>
                         <input
                             type="text"
                             placeholder="Customer Name"
                             value={customer.name}
-                            onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
+                            onChange={(e) =>
+                                setCustomer({ ...customer, name: e.target.value })
+                            }
                             className="w-full border px-2 py-1 rounded bg-gray-50 focus:bg-white"
                         />
                         <input
                             type="text"
                             placeholder="Phone Number"
                             value={customer.phone}
-                            onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
+                            onChange={(e) =>
+                                setCustomer({ ...customer, phone: e.target.value })
+                            }
                             className="w-full border px-2 py-1 rounded bg-gray-50 focus:bg-white"
                         />
                     </div>
@@ -216,29 +239,43 @@ export default function Home() {
                     </div>
                 </div>
 
-                {/* Items Table */}
+                {/* Item Table */}
                 <table className="w-full border-collapse border border-gray-300 text-left text-xs mb-4">
                     <thead>
                         <tr className="bg-gray-100 border-b border-gray-300">
-                            <th className="border border-gray-300 p-2 w-12 text-center">Sr. No.</th>
+                            <th className="border border-gray-300 p-2 w-12 text-center">
+                                Sr. No.
+                            </th>
                             <th className="border border-gray-300 p-2">Description</th>
-                            <th className="border border-gray-300 p-2 w-20 text-center">HSN Code</th>
-                            <th className="border border-gray-300 p-2 w-16 text-center">Qty</th>
-                            <th className="border border-gray-300 p-2 w-20 text-right">Price (₹)</th>
-                            <th className="border border-gray-300 p-2 w-24 text-right">Total (₹)</th>
+                            <th className="border border-gray-300 p-2 w-20 text-center">
+                                HSN Code
+                            </th>
+                            <th className="border border-gray-300 p-2 w-16 text-center">
+                                Qty
+                            </th>
+                            <th className="border border-gray-300 p-2 w-20 text-right">
+                                Price (₹)
+                            </th>
+                            <th className="border border-gray-300 p-2 w-24 text-right">
+                                Total (₹)
+                            </th>
                             <th className="border border-gray-300 p-1 w-8 text-center print:hidden"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {items.map((item, index) => (
                             <tr key={index} className="border-b border-gray-200">
-                                <td className="border border-gray-300 p-2 text-center">{index + 1}</td>
+                                <td className="border border-gray-300 p-2 text-center">
+                                    {index + 1}
+                                </td>
                                 <td className="border border-gray-300 p-1">
                                     <input
                                         type="text"
                                         value={item.description}
                                         placeholder="Item description"
-                                        onChange={(e) => handleItemChange(index, "description", e.target.value)}
+                                        onChange={(e) =>
+                                            handleItemChange(index, "description", e.target.value)
+                                        }
                                         className="w-full px-1 bg-transparent border-none focus:outline-none"
                                     />
                                 </td>
@@ -246,7 +283,9 @@ export default function Home() {
                                     <input
                                         type="text"
                                         value={item.hsn}
-                                        onChange={(e) => handleItemChange(index, "hsn", e.target.value)}
+                                        onChange={(e) =>
+                                            handleItemChange(index, "hsn", e.target.value)
+                                        }
                                         className="w-full px-1 text-center bg-transparent border-none focus:outline-none"
                                     />
                                 </td>
@@ -254,7 +293,9 @@ export default function Home() {
                                     <input
                                         type="text"
                                         value={item.quantity}
-                                        onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
+                                        onChange={(e) =>
+                                            handleItemChange(index, "quantity", e.target.value)
+                                        }
                                         className="w-full px-1 text-center bg-transparent border-none focus:outline-none"
                                     />
                                 </td>
@@ -262,7 +303,9 @@ export default function Home() {
                                     <input
                                         type="text"
                                         value={item.rate}
-                                        onChange={(e) => handleItemChange(index, "rate", e.target.value)}
+                                        onChange={(e) =>
+                                            handleItemChange(index, "rate", e.target.value)
+                                        }
                                         className="w-full px-1 text-right bg-transparent border-none focus:outline-none"
                                     />
                                 </td>
@@ -289,7 +332,7 @@ export default function Home() {
                     + Add Item
                 </button>
 
-                {/* Totals & Footer */}
+                {/* Invoice Summary */}
                 <div className="flex justify-between items-start pt-4 border-t border-gray-300">
                     <div className="text-[10px] text-gray-500 space-y-1 w-1/2">
                         <p className="font-bold text-gray-700">Terms & Conditions:</p>
@@ -320,7 +363,7 @@ export default function Home() {
                     </div>
                 </div>
 
-                {/* Signature */}
+                {/* Footer Signature */}
                 <div className="mt-12 text-right text-xs">
                     <p className="font-bold">For Om Muruga Auto Electrical Works</p>
                     <div className="h-10"></div>
@@ -345,7 +388,7 @@ export default function Home() {
 
                         <input
                             type="text"
-                            placeholder="Search by customer, date, bill no..."
+                            placeholder="Search by customer, bill no..."
                             value={searchQuery}
                             onChange={(e) => {
                                 setSearchQuery(e.target.value);

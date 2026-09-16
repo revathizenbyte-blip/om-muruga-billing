@@ -1,7 +1,14 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "om-muruga-billing",
-  "compatibility_date": "2026-09-16",
-  "assets": {
-    "directory": ".vercel/output/static"
-  }
+  "compatibility_date": "2024-09-26",
+  "compatibility_flags": [ "nodejs_compat" ],
+  "pages_build_output_dir": ".vercel/output/static",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "om-muruga-db",
+      "database_id": "REPLACE_WITH_YOUR_ACTUAL_D1_DATABASE_ID"
+    }
+  ]
 }
