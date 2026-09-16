@@ -7,44 +7,52 @@ export async function POST(request) {
         const body = await request.json();
         const { billNo, date, customerName, customerPhone, items, subtotal, total } = body;
 
-        // Get D1 Binding from Cloudflare Edge Context
+        // Get Cloudflare Edge Context
         const { env } = getRequestContext();
-        const db = env.DB; // Make sure your D1 binding name in Cloudflare settings is "DB"
+        const db = env?.DB;
 
         if (!db) {
             return new Response(
-                JSON.stringify({ error: "Database binding 'DB' not found" }),
+                JSON.stringify({ error: "Cloudflare D1 Binding 'DB' is missing in settings." }),
                 { status: 500, headers: { "Content-Type": "application/json" } }
             );
         }
 
-        // Insert into D1
-        const query = `
+        // Auto-create table if it doesn't exist yet
+        await db.prepare(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        billNo TEXT,
+        date TEXT,
+        customerName TEXT,
+        customerPhone TEXT,
+        items TEXT,
+        subtotal REAL,
+        total REAL
+      )
+    `).run();
+
+        // Insert record
+        await db.prepare(`
       INSERT INTO invoices (billNo, date, customerName, customerPhone, items, subtotal, total)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-
-        await db
-            .prepare(query)
-            .bind(
-                billNo || "",
-                date || "",
-                customerName || "",
-                customerPhone || "",
-                JSON.stringify(items || []),
-                subtotal || 0,
-                total || 0
-            )
-            .run();
+    `).bind(
+            String(billNo || ""),
+            String(date || ""),
+            String(customerName || ""),
+            String(customerPhone || ""),
+            JSON.stringify(items || []),
+            Number(subtotal) || 0,
+            Number(total) || 0
+        ).run();
 
         return new Response(
             JSON.stringify({ success: true, message: "Invoice saved successfully" }),
             { status: 200, headers: { "Content-Type": "application/json" } }
         );
     } catch (error) {
-        console.error("API Error:", error);
         return new Response(
-            JSON.stringify({ error: error.message || "Failed to save invoice" }),
+            JSON.stringify({ error: error.message || "Failed to execute database query" }),
             { status: 500, headers: { "Content-Type": "application/json" } }
         );
     }
@@ -53,23 +61,25 @@ export async function POST(request) {
 export async function GET(request) {
     try {
         const { env } = getRequestContext();
-        const db = env.DB;
+        const db = env?.DB;
+
+        if (!db) {
+            return new Response(
+                JSON.stringify({ error: "Cloudflare D1 Binding 'DB' missing" }),
+                { status: 500, headers: { "Content-Type": "application/json" } }
+            );
+        }
 
         const { searchParams } = new URL(request.url);
         const query = searchParams.get("query") || "";
 
         let results;
         if (query) {
-            results = await db
-                .prepare(
-                    "SELECT * FROM invoices WHERE customerName LIKE ? OR billNo LIKE ? ORDER BY id DESC LIMIT 20"
-                )
-                .bind(`%${query}%`, `%${query}%`)
-                .all();
+            results = await db.prepare(
+                "SELECT * FROM invoices WHERE customerName LIKE ? OR billNo LIKE ? ORDER BY id DESC LIMIT 20"
+            ).bind(`%${query}%`, `%${query}%`).all();
         } else {
-            results = await db
-                .prepare("SELECT * FROM invoices ORDER BY id DESC LIMIT 20")
-                .all();
+            results = await db.prepare("SELECT * FROM invoices ORDER BY id DESC LIMIT 20").all();
         }
 
         return new Response(JSON.stringify(results.results || []), {
@@ -77,9 +87,9 @@ export async function GET(request) {
             headers: { "Content-Type": "application/json" },
         });
     } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-        });
+        return new Response(
+            JSON.stringify({ error: error.message || "Failed to fetch invoices" }),
+            { status: 500, headers: { "Content-Type": "application/json" } }
+        );
     }
 }
