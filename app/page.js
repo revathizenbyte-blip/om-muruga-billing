@@ -6,10 +6,10 @@ export default function Home() {
     const [billNo, setBillNo] = useState("1");
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
 
-    // Set initial customer values to EMPTY strings
+    // Empty default customer fields
     const [customer, setCustomer] = useState({ name: "", phone: "" });
 
-    // Set initial item values so Qty, Rate, and HSN start EMPTY
+    // Empty default item row
     const [items, setItems] = useState([
         { description: "", hsn: "", quantity: "", rate: "", amount: 0 },
     ]);
@@ -48,6 +48,82 @@ export default function Home() {
         }
     };
 
+    // Real Database Save Function
+    const handleSave = async () => {
+        if (!customer.name) {
+            alert("Please enter customer name");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const response = await fetch("/api/invoices", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    billNo,
+                    date,
+                    customerName: customer.name,
+                    customerPhone: customer.phone,
+                    items,
+                    subtotal,
+                    total,
+                }),
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                alert("Invoice saved successfully!");
+            } else {
+                alert("Failed to save: " + (data.error || "Unknown error"));
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Error saving invoice");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Real Database Fetching Function
+    const fetchInvoices = async (query = "") => {
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/invoices?query=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                setSavedInvoices(data);
+            }
+        } catch (err) {
+            console.error("Error fetching invoices:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleOpenSearch = () => {
+        setShowSearchModal(true);
+        fetchInvoices("");
+    };
+
+    const loadInvoice = (inv) => {
+        setBillNo(inv.billNo ? inv.billNo.toString() : "1");
+        setDate(inv.date || new Date().toISOString().split("T")[0]);
+        setCustomer({ name: inv.customerName || "", phone: inv.customerPhone || "" });
+
+        try {
+            if (typeof inv.items === "string") {
+                setItems(JSON.parse(inv.items));
+            } else if (Array.isArray(inv.items)) {
+                setItems(inv.items);
+            }
+        } catch (e) {
+            setItems([]);
+        }
+
+        setShowSearchModal(false);
+    };
+
     return (
         <main className="min-h-screen bg-gray-600 p-4 sm:p-8 flex flex-col items-center">
             {/* Top Action Bar */}
@@ -55,27 +131,31 @@ export default function Home() {
                 <h1 className="text-xl font-bold text-white">Om Muruga Invoice Generator</h1>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => setShowSearchModal(true)}
-                        className="bg-gray-800 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-700"
+                        onClick={handleOpenSearch}
+                        className="bg-gray-800 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-700 cursor-pointer"
                     >
                         Search Saved
                     </button>
                     <button
-                        onClick={() => alert("Save functionality attached!")}
-                        className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm font-semibold hover:bg-emerald-700"
+                        onClick={handleSave}
+                        disabled={loading}
+                        className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm font-semibold hover:bg-emerald-700 cursor-pointer"
                     >
-                        Save Only
+                        {loading ? "Saving..." : "Save Only"}
                     </button>
                     <button
-                        onClick={() => window.print()}
-                        className="bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-semibold hover:bg-blue-800"
+                        onClick={() => {
+                            handleSave();
+                            window.print();
+                        }}
+                        className="bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-semibold hover:bg-blue-800 cursor-pointer"
                     >
                         Save & Print
                     </button>
                 </div>
             </div>
 
-            {/* Tax Invoice Box */}
+            {/* Tax Invoice Document Template */}
             <div className="bg-white w-full max-w-3xl p-8 rounded shadow-xl text-gray-800 border text-sm">
                 {/* Header */}
                 <div className="text-center border-b pb-4 mb-4">
@@ -94,7 +174,7 @@ export default function Home() {
                     </h3>
                 </div>
 
-                {/* Customer Details */}
+                {/* Customer & Bill Details */}
                 <div className="flex justify-between items-start gap-4 mb-4">
                     <div className="w-1/2 space-y-2">
                         <label className="text-xs font-semibold text-gray-600 block">To</label>
@@ -248,6 +328,58 @@ export default function Home() {
                     <p className="text-gray-500 text-[10px]">Authorised Signatory</p>
                 </div>
             </div>
+
+            {/* Search Modal */}
+            {showSearchModal && (
+                <div className="fixed inset-0 bg-black/60 flex justify-center items-center p-4 z-50">
+                    <div className="bg-white rounded-lg p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto text-sm">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-lg font-bold">Saved Invoices</h2>
+                            <button
+                                onClick={() => setShowSearchModal(false)}
+                                className="text-gray-500 hover:text-gray-700 font-bold"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <input
+                            type="text"
+                            placeholder="Search by customer, date, bill no..."
+                            value={searchQuery}
+                            onChange={(e) => {
+                                setSearchQuery(e.target.value);
+                                fetchInvoices(e.target.value);
+                            }}
+                            className="w-full border p-2 rounded mb-4"
+                        />
+
+                        {savedInvoices.length === 0 ? (
+                            <p className="text-center text-gray-500 py-4">No invoices found</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {savedInvoices.map((inv) => (
+                                    <div
+                                        key={inv.id}
+                                        onClick={() => loadInvoice(inv)}
+                                        className="p-3 border rounded hover:bg-gray-100 cursor-pointer flex justify-between items-center"
+                                    >
+                                        <div>
+                                            <div className="font-semibold">{inv.customerName}</div>
+                                            <div className="text-xs text-gray-500">
+                                                Bill #{inv.billNo} | {inv.date}
+                                            </div>
+                                        </div>
+                                        <span className="font-bold text-gray-800">
+                                            ₹{(inv.total || 0).toFixed(2)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </main>
     );
 }
