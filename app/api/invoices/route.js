@@ -1,63 +1,85 @@
-import { NextResponse } from "next/server";
-import { getInvoices, createInvoice, deleteInvoice } from "@/lib/db";
+import { getRequestContext } from "@cloudflare/next-on-pages";
 
-export const runtime = 'edge';
-
-export async function GET(request) {
-    try {
-        const { searchParams } = new URL(request.url);
-        const query = (searchParams.get("query") || "").toLowerCase();
-
-        const allInvoices = await getInvoices();
-
-        // Filter invoices by customer name, date, or bill number
-        const filtered = allInvoices.filter((inv) => {
-            const nameMatch = inv.customerName?.toLowerCase().includes(query);
-            const dateMatch = inv.date?.toLowerCase().includes(query);
-            const billMatch = inv.billNo?.toString().includes(query);
-            return nameMatch || dateMatch || billMatch;
-        });
-
-        return NextResponse.json(filtered);
-    } catch (error) {
-        console.error("GET Error:", error);
-        return NextResponse.json({ error: "Database fetch failed" }, { status: 500 });
-    }
-}
+export const runtime = "edge";
 
 export async function POST(request) {
     try {
         const body = await request.json();
+        const { billNo, date, customerName, customerPhone, items, subtotal, total } = body;
 
-        // Calls createInvoice from lib/db.js to interact with Cloudflare D1
-        const result = await createInvoice(body);
+        // Get D1 Binding from Cloudflare Edge Context
+        const { env } = getRequestContext();
+        const db = env.DB; // Make sure your D1 binding name in Cloudflare settings is "DB"
 
-        return NextResponse.json({
-            success: true,
-            id: result?.meta?.last_row_id || result?.id || null
-        });
+        if (!db) {
+            return new Response(
+                JSON.stringify({ error: "Database binding 'DB' not found" }),
+                { status: 500, headers: { "Content-Type": "application/json" } }
+            );
+        }
+
+        // Insert into D1
+        const query = `
+      INSERT INTO invoices (billNo, date, customerName, customerPhone, items, subtotal, total)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+
+        await db
+            .prepare(query)
+            .bind(
+                billNo || "",
+                date || "",
+                customerName || "",
+                customerPhone || "",
+                JSON.stringify(items || []),
+                subtotal || 0,
+                total || 0
+            )
+            .run();
+
+        return new Response(
+            JSON.stringify({ success: true, message: "Invoice saved successfully" }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+        );
     } catch (error) {
-        console.error("POST Error:", error);
-        return NextResponse.json(
-            { error: error.message || "Failed to save invoice" },
-            { status: 500 }
+        console.error("API Error:", error);
+        return new Response(
+            JSON.stringify({ error: error.message || "Failed to save invoice" }),
+            { status: 500, headers: { "Content-Type": "application/json" } }
         );
     }
 }
 
-export async function DELETE(request) {
+export async function GET(request) {
     try {
-        const { searchParams } = new URL(request.url);
-        const id = searchParams.get("id");
+        const { env } = getRequestContext();
+        const db = env.DB;
 
-        if (!id) {
-            return NextResponse.json({ error: "Missing invoice ID" }, { status: 400 });
+        const { searchParams } = new URL(request.url);
+        const query = searchParams.get("query") || "";
+
+        let results;
+        if (query) {
+            results = await db
+                .prepare(
+                    "SELECT * FROM invoices WHERE customerName LIKE ? OR billNo LIKE ? ORDER BY id DESC LIMIT 20"
+                )
+                .bind(`%${query}%`, `%${query}%`)
+                .all();
+        } else {
+            results = await db
+                .prepare("SELECT * FROM invoices ORDER BY id DESC LIMIT 20")
+                .all();
         }
 
-        await deleteInvoice(id);
-        return NextResponse.json({ success: true });
+        return new Response(JSON.stringify(results.results || []), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+        });
     } catch (error) {
-        console.error("DELETE Error:", error);
-        return NextResponse.json({ error: "Failed to delete invoice" }, { status: 500 });
+        return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+        });
     }
 }
